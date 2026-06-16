@@ -1,0 +1,24 @@
+# Python/runtime noise
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local app/runtime state
+archive_config.local.json
+*.log
+
+# Downloaded exam artifacts are intentionally not versioned.
+# Keep the folder shape, not the downloaded PDFs/images/docs.
+downloads/*
+!downloads/.gitkeep
+!downloads/README.md
+official_downloads/*
+!official_downloads/.gitkeep
+!official_downloads/README.md
+
+# Generated reports can contain local paths and large inventories.
+reports/*
+!reports/README.md
+!reports/summary.json

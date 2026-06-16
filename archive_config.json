@@ -1,0 +1,21 @@
+{
+  "profile_name": "생활과 윤리",
+  "source_root": "C:/Users/Dell/iCloudDrive/수능및모의고사문제/생활과 윤리 및 윤리와 사상/생활과 윤리",
+  "copy_root": "C:/Users/Dell/iCloudDrive/수능및모의고사문제/생활과 윤리 및 윤리와 사상/생활과 윤리/[평가원]평가원 모의고사 생윤/[공식]평가원 개별파일 생윤 2014-2026",
+  "reports_dir": "reports",
+  "download_dir": "downloads/생활과 윤리/current",
+  "legacy_download_dir": "downloads/생활과 윤리/legacy",
+  "academic_year_start": 2014,
+  "academic_year_end": 2026,
+  "sessions": [
+    "6월",
+    "9월",
+    "수능"
+  ],
+  "future_check_default": false,
+  "future_years_ahead": 1,
+  "official_sources_report": "reports/official_sources_생활과_윤리_2014_2026.csv",
+  "official_download_manifest": "reports/official_download_manifest_생활과_윤리_2014_2026.json",
+  "latest_gap_report": "reports/official_gap_plan_latest.csv",
+  "latest_apply_manifest": "reports/official_gap_apply_manifest_latest.json"
+}
