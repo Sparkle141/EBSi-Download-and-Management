@@ -727,7 +727,7 @@ def _run_assemblers(result_dir: Path, config: dict[str, Any], log: TextIO) -> li
         docx_path = assemble_docx(
             result_dir,
             layout_mode=str(config.get("docx_layout") or "questions"),
-            asset_text_mode=str(config.get("asset_text") or "tables_only"),
+            asset_text_mode=str(config.get("asset_text") or "below"),
         )
         generated.append(docx_path)
         _log(log, f"DOCX generated: {docx_path}")
