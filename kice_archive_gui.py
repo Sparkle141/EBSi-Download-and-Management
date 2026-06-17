@@ -303,8 +303,7 @@ class ArchiveApp:
         return APP_DIR / "test_crawl_and_reassemble"
 
     def _reassembly_output_dir(self) -> Path:
-        safe = self._safe_subject_name()
-        return self._reassembly_root() / "output" / f"{safe}_reassembled"
+        return APP_DIR / self._subject_download_dir()
 
     def _default_sessions_for_subject(self, subject: dict[str, str]) -> list[str]:
         family = self._subject_family(subject)
@@ -326,14 +325,14 @@ class ArchiveApp:
             self.source_root.set(subject["source_root"])
             self.config.source_root = Path(subject["source_root"])
         else:
-            default_source = APP_DIR / self._subject_download_dir()
+            default_source = self._subject_download_dir()
             self.source_root.set(str(default_source))
             self.config.source_root = default_source
         if subject.get("copy_root"):
             self.copy_root.set(subject["copy_root"])
             self.config.copy_root = Path(subject["copy_root"])
         else:
-            default_copy = APP_DIR / "exports" / subject["name"]
+            default_copy = Path("exports") / subject["name"]
             self.copy_root.set(str(default_copy))
             self.config.copy_root = default_copy
         self.save_paths()
@@ -381,16 +380,25 @@ class ArchiveApp:
         save_config(self.config, APP_DIR / "archive_config.json")
 
     def choose_source(self) -> None:
-        path = filedialog.askdirectory(title="관리 대상 폴더 선택", initialdir=self.source_root.get())
+        path = filedialog.askdirectory(title="관리 대상 폴더 선택", initialdir=self._dialog_initial_dir(self.source_root.get()))
         if path:
             self.source_root.set(path)
             self.save_paths()
 
     def choose_copy_root(self) -> None:
-        path = filedialog.askdirectory(title="저장 경로 선택", initialdir=self.copy_root.get())
+        path = filedialog.askdirectory(title="저장 경로 선택", initialdir=self._dialog_initial_dir(self.copy_root.get()))
         if path:
             self.copy_root.set(path)
             self.save_paths()
+
+    def _dialog_initial_dir(self, raw_path: str) -> str:
+        path = Path(raw_path)
+        if path.exists():
+            return str(path)
+        parent = path.parent
+        if parent.exists():
+            return str(parent)
+        return str(APP_DIR)
 
     def open_path(self, path: str) -> None:
         target = Path(path)
@@ -400,6 +408,16 @@ class ArchiveApp:
             else:
                 return
         os.startfile(target)
+
+    def _ensure_download_folders(self) -> None:
+        (APP_DIR / self._subject_download_dir()).mkdir(parents=True, exist_ok=True)
+        (APP_DIR / self._subject_legacy_dir()).mkdir(parents=True, exist_ok=True)
+
+    def _ensure_copy_root(self) -> None:
+        target = Path(self.copy_root.get())
+        if not target.is_absolute():
+            target = APP_DIR / target
+        target.mkdir(parents=True, exist_ok=True)
 
     def open_source(self) -> None:
         self.open_path(self.source_root.get())
@@ -426,11 +444,11 @@ class ArchiveApp:
             return
         command = [
             sys.executable,
-            str(self._reassembly_root() / "system" / "pipeline_runner.py"),
-            "--input",
+            "reassemble_downloads_by_folder.py",
+            "--input-dir",
             str(input_dir),
-            "--output-dir",
-            str(self._reassembly_output_dir()),
+            "--manifest",
+            str(self._subject_manifest("reassembly_manifest")),
         ]
         self.run_async("다운로드 원본 전사/재조립", command, allow_fail=True)
 
@@ -444,8 +462,8 @@ class ArchiveApp:
                     "선택 다운로드: 표에서 선택한 가능 항목만 다운로드 원본 폴더에 저장합니다.",
                     "선택 항목 저장: 다운로드 원본 폴더의 파일을 사용자가 지정한 저장 경로로 복사합니다.",
                     "저장 경로 열기: 복사 결과를 확인할 폴더를 엽니다.",
-                    "다운로드 원본 전사/재조립: 다운로드한 문제/해설 PDF를 별도 작업 폴더에서 Markdown, HTML, DOCX로 변환합니다.",
-                    "재조립 결과 열기: 전사/재조립 산출물 폴더를 엽니다.",
+                    "다운로드 원본 전사/재조립: 다운로드한 문제/해설 PDF 옆에 '6월 전사 및 조립' 같은 폴더를 만들고 Markdown, HTML, DOCX로 변환합니다.",
+                    "재조립 결과 열기: 과목 다운로드 원본 폴더를 엽니다.",
                     "재조립 로그 열기: 전사/재조립 과정의 로그를 엽니다.",
                     "환경 점검: EBSi 접속, 네트워크, 폴더 상태를 확인합니다.",
                     "관리 대상 폴더 확인: 사용자가 시험 자료를 총괄 배치할 폴더를 엽니다.",
@@ -617,6 +635,7 @@ class ArchiveApp:
     def download_selected(self) -> None:
         if not self._ensure_official_ready():
             return
+        self._ensure_download_folders()
         selected = list(self.availability_tree.selection())
         if not selected:
             messagebox.showinfo("선택 필요", "EBS 목록에서 다운로드할 행을 선택해 주세요.")
@@ -673,6 +692,7 @@ class ArchiveApp:
         if not keys:
             messagebox.showinfo("복사 불가", "선택한 항목 중 현재 복사 가능한 항목이 없습니다.")
             return
+        self._ensure_copy_root()
 
         sources_report = self._subject_sources_report("availability")
         if not sources_report.exists():
@@ -724,6 +744,7 @@ class ArchiveApp:
     def refresh_downloads(self) -> None:
         if not self._ensure_official_ready():
             return
+        self._ensure_download_folders()
         out_path = self._subject_sources_report("official_sources")
         command = [
             *self._base_official_command(out_path),
@@ -758,6 +779,7 @@ class ArchiveApp:
             "공식 다운로드 원본을 선택한 저장 경로로 복사합니다.\n기존 파일과 다른 파일이 있으면 중단됩니다.\n계속할까요?",
         ):
             return
+        self._ensure_copy_root()
         command = [
             sys.executable,
             "apply_official_gap_plan.py",

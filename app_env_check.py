@@ -36,7 +36,7 @@ def check_path(name: str, path: Path, must_exist: bool = True) -> dict[str, str]
     parent = path.parent
     if parent.exists():
         return warn_result(name, f"will be created under: {parent}")
-    return fail_result(name, f"parent not found: {parent}")
+    return warn_result(name, f"will be created with parent folders: {path}")
 
 
 def check_dns(host: str, timeout: int) -> dict[str, str]:
@@ -93,7 +93,7 @@ def run_checks(include_future: bool, timeout: int) -> dict[str, object]:
     config = load_config()
     checks: list[dict[str, str]] = []
     checks.append(ok_result("Python", sys.version.split()[0]))
-    checks.append(check_path("원본 저장 폴더", config.source_root))
+    checks.append(check_path("원본 저장 폴더", config.source_root, must_exist=False))
     checks.append(check_path("저장 경로(복사 목적지)", config.copy_root, must_exist=False))
     checks.append(check_path("보고서 폴더", config.reports_dir, must_exist=False))
     checks.append(check_path("다운로드 원본 폴더", config.download_dir, must_exist=False))
