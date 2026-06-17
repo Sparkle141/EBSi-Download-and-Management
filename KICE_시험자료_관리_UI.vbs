@@ -1,27 +1,108 @@
 Option Explicit
 
-Dim fso, shell, baseDir, pythonw, python, script
+Dim fso, shell, baseDir, pythonExe, script, checkedLocations
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
 
 baseDir = fso.GetParentFolderName(WScript.ScriptFullName)
-pythonw = "C:\Users\Dell\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\pythonw.exe"
-python = "C:\Users\Dell\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 script = baseDir & "\kice_archive_gui.py"
+checkedLocations = ""
 
 If Not fso.FileExists(script) Then
   MsgBox "GUI script was not found:" & vbCrLf & script, vbCritical, "KICE Archive UI"
   WScript.Quit 1
 End If
 
-If fso.FileExists(pythonw) Then
-  shell.Run Quote(pythonw) & " " & Quote(script), 1, False
-ElseIf fso.FileExists(python) Then
-  shell.Run Quote(python) & " " & Quote(script), 1, False
-Else
-  MsgBox "Python runtime was not found.", vbCritical, "KICE Archive UI"
+pythonExe = ResolvePythonRuntime()
+If pythonExe = "" Then
+  MsgBox "Python runtime was not found." & vbCrLf & vbCrLf & _
+    "Checked locations:" & vbCrLf & checkedLocations & vbCrLf & _
+    "Install Python or create .venv in this project folder, then run this launcher again.", _
+    vbCritical, "KICE Archive UI"
   WScript.Quit 1
 End If
+
+If shell.Environment("PROCESS")("EBSI_LAUNCHER_DRY_RUN") = "1" Then
+  WScript.Echo pythonExe
+  WScript.Quit 0
+End If
+
+shell.CurrentDirectory = baseDir
+shell.Run Quote(pythonExe) & " " & Quote(script), 1, False
+
+Function ResolvePythonRuntime()
+  Dim env, candidates, candidate, found
+  Set env = shell.Environment("PROCESS")
+
+  candidates = Array( _
+    baseDir & "\.venv\Scripts\pythonw.exe", _
+    baseDir & "\.venv\Scripts\python.exe", _
+    env("LOCALAPPDATA") & "\Python\bin\pythonw.exe", _
+    env("LOCALAPPDATA") & "\Python\bin\python.exe", _
+    env("LOCALAPPDATA") & "\Programs\Python\Python314\pythonw.exe", _
+    env("LOCALAPPDATA") & "\Programs\Python\Python314\python.exe", _
+    env("LOCALAPPDATA") & "\Programs\Python\Python313\pythonw.exe", _
+    env("LOCALAPPDATA") & "\Programs\Python\Python313\python.exe", _
+    env("LOCALAPPDATA") & "\Programs\Python\Python312\pythonw.exe", _
+    env("LOCALAPPDATA") & "\Programs\Python\Python312\python.exe", _
+    env("PROGRAMFILES") & "\Python314\pythonw.exe", _
+    env("PROGRAMFILES") & "\Python314\python.exe", _
+    env("PROGRAMFILES") & "\Python313\pythonw.exe", _
+    env("PROGRAMFILES") & "\Python313\python.exe", _
+    env("PROGRAMFILES") & "\Python312\pythonw.exe", _
+    env("PROGRAMFILES") & "\Python312\python.exe", _
+    env("USERPROFILE") & "\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\pythonw.exe", _
+    env("USERPROFILE") & "\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" _
+  )
+
+  For Each candidate In candidates
+    found = ExistingFile(candidate)
+    If found <> "" Then
+      ResolvePythonRuntime = found
+      Exit Function
+    End If
+  Next
+
+  found = FindOnPath("pythonw.exe")
+  If found <> "" Then
+    ResolvePythonRuntime = found
+    Exit Function
+  End If
+
+  ResolvePythonRuntime = FindOnPath("python.exe")
+End Function
+
+Function ExistingFile(path)
+  If path <> "" Then
+    checkedLocations = checkedLocations & "- " & path & vbCrLf
+    If fso.FileExists(path) Then
+      ExistingFile = path
+      Exit Function
+    End If
+  End If
+  ExistingFile = ""
+End Function
+
+Function FindOnPath(exeName)
+  Dim exec, line
+  checkedLocations = checkedLocations & "- PATH: " & exeName & vbCrLf
+  On Error Resume Next
+  Set exec = shell.Exec("%ComSpec% /c where " & exeName & " 2>nul")
+  If Err.Number <> 0 Then
+    Err.Clear
+    FindOnPath = ""
+    Exit Function
+  End If
+  On Error GoTo 0
+  If Not exec.StdOut.AtEndOfStream Then
+    line = Trim(exec.StdOut.ReadLine)
+    If fso.FileExists(line) Then
+      FindOnPath = line
+      Exit Function
+    End If
+  End If
+  FindOnPath = ""
+End Function
 
 Function Quote(value)
   Quote = Chr(34) & value & Chr(34)
