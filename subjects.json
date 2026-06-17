@@ -94,8 +94,6 @@
     "area_ord": "5",
     "subject_id": "63002",
     "sessions": ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"],
-    "source_root": "C:/Users/Dell/iCloudDrive/수능및모의고사문제/생활과 윤리 및 윤리와 사상/생활과 윤리",
-    "copy_root": "C:/Users/Dell/iCloudDrive/수능및모의고사문제/생활과 윤리 및 윤리와 사상/생활과 윤리/[평가원]평가원 모의고사 생윤/[공식]평가원 개별파일 생윤 2014-2026",
     "enabled": true
   },
   {
@@ -108,8 +106,6 @@
     "area_ord": "5",
     "subject_id": "63003",
     "sessions": ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"],
-    "source_root": "C:/Users/Dell/iCloudDrive/수능및모의고사문제/생활과 윤리 및 윤리와 사상/윤리와 사상",
-    "copy_root": "C:/Users/Dell/iCloudDrive/수능및모의고사문제/생활과 윤리 및 윤리와 사상/윤리와 사상/[평가원 공식]윤리와 사상 개별",
     "enabled": true
   },
   {
@@ -582,8 +578,6 @@
     "area_ord": "5",
     "subject_id": "63002",
     "sessions": ["3월", "4월", "5월", "7월", "10월"],
-    "source_root": "C:/Users/Dell/iCloudDrive/수능및모의고사문제/생활과 윤리 및 윤리와 사상/생활과 윤리",
-    "copy_root": "C:/Users/Dell/iCloudDrive/수능및모의고사문제/생활과 윤리 및 윤리와 사상/생활과 윤리/[학평 공식]생활과 윤리 개별",
     "enabled": true,
     "experimental": true
   },
@@ -598,8 +592,6 @@
     "area_ord": "5",
     "subject_id": "63003",
     "sessions": ["3월", "4월", "5월", "7월", "10월"],
-    "source_root": "C:/Users/Dell/iCloudDrive/수능및모의고사문제/생활과 윤리 및 윤리와 사상/윤리와 사상",
-    "copy_root": "C:/Users/Dell/iCloudDrive/수능및모의고사문제/생활과 윤리 및 윤리와 사상/윤리와 사상/[학평 공식]윤리와 사상 개별",
     "enabled": true,
     "experimental": true
   },

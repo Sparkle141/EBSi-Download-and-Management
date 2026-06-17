@@ -29,6 +29,9 @@ downloads/*
 official_downloads/*
 !official_downloads/.gitkeep
 !official_downloads/README.md
+exports/*
+!exports/.gitkeep
+!exports/README.md
 
 # Generated reports can contain local paths and large inventories.
 reports/*

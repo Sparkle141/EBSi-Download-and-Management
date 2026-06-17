@@ -12,10 +12,7 @@ from pathlib import Path
 from typing import Iterable
 
 
-DEFAULT_ROOT = (
-    r"C:\Users\Dell\iCloudDrive\수능및모의고사문제"
-    r"\생활과 윤리 및 윤리와 사상\생활과 윤리"
-)
+DEFAULT_ROOT = "downloads/생활과 윤리/current"
 
 CRAWLING_PROVENANCE_ID = "019e1a50-b475-77b2-a7d9-0ecd53cc2ab8"
 KICE_SESSIONS = ("6월", "9월", "수능")

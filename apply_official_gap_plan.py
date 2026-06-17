@@ -8,10 +8,7 @@ import shutil
 from pathlib import Path
 
 
-DEFAULT_TARGET_ROOT = (
-    r"C:\Users\Dell\iCloudDrive\수능및모의고사문제\생활과 윤리 및 윤리와 사상\생활과 윤리"
-    r"\[평가원]평가원 모의고사 생윤\[공식]평가원 개별파일 생윤 2014-2026"
-)
+DEFAULT_TARGET_ROOT = "exports/생활과 윤리"
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
