@@ -9,6 +9,18 @@ venv/
 archive_config.local.json
 *.log
 
+# Locally supplied integration bundles and generated test artifacts.
+*.zip
+test_crawl_and_reassemble/**/system/packages/
+test_crawl_and_reassemble/**/input/*
+!test_crawl_and_reassemble/**/input/.gitkeep
+test_crawl_and_reassemble/**/intermediate/*
+!test_crawl_and_reassemble/**/intermediate/.gitkeep
+test_crawl_and_reassemble/**/logs/*
+!test_crawl_and_reassemble/**/logs/.gitkeep
+test_crawl_and_reassemble/**/output/*
+!test_crawl_and_reassemble/**/output/.gitkeep
+
 # Downloaded exam artifacts are intentionally not versioned.
 # Keep the folder shape, not the downloaded PDFs/images/docs.
 downloads/*

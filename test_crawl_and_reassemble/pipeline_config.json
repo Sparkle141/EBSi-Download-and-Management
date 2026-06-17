@@ -1,0 +1,25 @@
+﻿{
+    "input_dir":  "input",
+    "input_dirs":  [
+
+                   ],
+    "intermediate_dir":  "intermediate",
+    "output_dir":  "output",
+    "external_output_dir":  "",
+    "pattern":  "*.pdf",
+    "recursive":  true,
+    "line_tolerance":  3,
+    "include_placeholders":  true,
+    "blank_before_question":  true,
+    "make_html":  true,
+    "make_docx":  true,
+    "docx_layout":  "questions",
+    "asset_text":  "tables_only",
+    "install_packages":  true,
+    "copy_to_output":  true,
+    "copy_to_external_output":  true,
+    "open_output":  false,
+    "ebsi_reports_mode":  "auto",
+    "include_legacy_downloads":  false,
+    "make_llm_bundle":  true
+}
