@@ -624,17 +624,17 @@ def record_has_asset_kind(
     return False
 
 
-def render_image_text_sections(
+def render_asset_text_sections(
     page_records: list[TextLineRecord],
     assets_by_id: dict[str, AssetRecord],
 ) -> list[str]:
     groups: dict[str, list[TextLineRecord]] = {}
     for record in page_records:
-        if record.region != "image":
+        if record.region not in {"image", "table"}:
             continue
         if is_asset_placeholder_text(record.text):
             continue
-        if not record_has_asset_kind(record, assets_by_id, {"image"}):
+        if not record_has_asset_kind(record, assets_by_id, {"image", "table"}):
             continue
         label = record.asset_label or record.asset_id or "그림"
         groups.setdefault(label, []).append(record)
@@ -642,9 +642,11 @@ def render_image_text_sections(
     if not groups:
         return []
 
-    output = ["", "### 그림에서 추출된 텍스트", ""]
+    output = ["", "### 에셋 추출 텍스트", "", "> 그림/표 내부 또는 바로 주변에서 읽은 검토용 텍스트입니다.", ""]
     for label, records in groups.items():
         output.append(f"#### {label}")
+        output.append("")
+        output.append("---")
         output.append("")
         for record in records:
             output.append(f"- {record.text}")
@@ -798,7 +800,7 @@ def transcribe_pdf(
                     )
                 )
 
-            image_text_sections = render_image_text_sections(
+            image_text_sections = render_asset_text_sections(
                 line_records[page_line_start:],
                 assets_by_id,
             )

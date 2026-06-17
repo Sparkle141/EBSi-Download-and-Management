@@ -890,7 +890,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--asset-text",
         choices=("tables_only", "below", "none"),
-        default="tables_only",
+        default="below",
         help="lines.json의 표/그림 내부 텍스트 표시 방식입니다. 기본값은 표만 보조 표시합니다.",
     )
     args = parser.parse_args(argv)

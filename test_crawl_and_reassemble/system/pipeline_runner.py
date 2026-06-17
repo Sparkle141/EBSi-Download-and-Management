@@ -44,7 +44,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "make_html": True,
     "make_docx": True,
     "docx_layout": "questions",
-    "asset_text": "tables_only",
+    "asset_text": "below",
     "install_packages": True,
     "copy_to_output": True,
     "copy_to_external_output": True,
@@ -626,6 +626,19 @@ def _process_pdf(
 
     exam_meta = parse_exam_metadata(pdf_path)
     asset_counts = Counter(asset.kind for asset in assets)
+    ai_metadata = {
+        "execution_mode": "local_code",
+        "asset_text_policy": "그림/표 주변에서 추출된 텍스트는 검토용 구분자와 함께 해당 산출물 아래에 배치합니다.",
+        "local_limitations": [
+            "스캔본, 말풍선, 표 내부 글자는 PDF 상태에 따라 누락되거나 순서가 어긋날 수 있습니다.",
+            "영어 듣기 음성 파일은 보관 대상으로만 취급하며 음성 전사는 수행하지 않습니다.",
+            "문제, 해설, 영어 대본의 문항별 정밀 결합은 AI Agent 검수 단계에서 보강하는 것을 권장합니다.",
+        ],
+        "agent_enhanced_workflow": [
+            "AI Agent 모드에서는 이미지/표 내부 텍스트와 말풍선까지 다시 읽어 문항 아래에 보강할 수 있습니다.",
+            "문제 PDF, 해설 PDF, 영어 대본을 같은 문항 단위로 재조립하고 처리 로그를 함께 근거로 남길 수 있습니다.",
+        ],
+    }
     metadata = {
         "schema": "exam-reassembler-result-v1",
         "created_at": datetime.now().isoformat(timespec="seconds"),
@@ -641,11 +654,12 @@ def _process_pdf(
         "asset_counts_by_kind": dict(asset_counts),
         "scan_fallback_count": asset_counts.get("page_screenshot", 0),
         "line_count": len(line_records),
+        "ai_metadata": ai_metadata,
         "pipeline": {
             "make_html": bool(config.get("make_html", True)),
             "make_docx": bool(config.get("make_docx", True)),
             "docx_layout": str(config.get("docx_layout") or "questions"),
-            "asset_text": str(config.get("asset_text") or "tables_only"),
+            "asset_text": str(config.get("asset_text") or "below"),
             "make_llm_bundle": bool(config.get("make_llm_bundle", True)),
         },
     }
@@ -793,6 +807,8 @@ def _write_llm_bundle(
             f"- answer_extraction_status: {source_bundle.get('answer_extraction_status') or ''}",
             f"- answer_source_role: {source_bundle.get('answer_source_role') or ''}",
             "- 정답 이미지와 해설 PDF의 본문은 이 파일 안에 강제로 전사하지 않습니다. LLM에 넘길 때 위 파일을 함께 첨부하거나 경로를 참조시키는 방식으로 사용합니다.",
+            "- 로컬 코드는 그림/표 내부 텍스트를 검토용으로 보강하지만, 말풍선이나 복잡한 표는 AI Agent 모드에서 재검수하는 편이 안전합니다.",
+            "- 영어 듣기 음성은 보관만 하며 자동 음성 전사는 하지 않습니다. 제공 대본이 있으면 별도 자료로 함께 전달합니다.",
             "- 이 부록은 EBSi 보고서의 group_key 기준으로 연결된 경우에만 생성됩니다.",
             "",
             "### 공식 출처 메타데이터 JSON",
@@ -856,6 +872,7 @@ def _write_llm_manifest(
         "source_pdf": metadata.get("input_pdf"),
         "exam": metadata.get("exam"),
         "source_bundle": metadata.get("source_bundle"),
+        "ai_metadata": metadata.get("ai_metadata"),
         "primary_text_file": md_path.name,
         "llm_bundle_file": Path(str(metadata.get("llm_bundle_markdown"))).name
         if metadata.get("llm_bundle_markdown")
@@ -924,6 +941,16 @@ def _render_llm_manifest_markdown(manifest: dict[str, Any]) -> str:
                 "",
             ]
         )
+    ai_metadata = manifest.get("ai_metadata")
+    if isinstance(ai_metadata, dict):
+        lines.extend(["## AI metadata", ""])
+        lines.append(f"- execution_mode: {ai_metadata.get('execution_mode') or ''}")
+        lines.append(f"- asset_text_policy: {ai_metadata.get('asset_text_policy') or ''}")
+        for item in ai_metadata.get("local_limitations") or []:
+            lines.append(f"- local_limit: {item}")
+        for item in ai_metadata.get("agent_enhanced_workflow") or []:
+            lines.append(f"- agent_mode: {item}")
+        lines.append("")
     lines.extend(["## 메타데이터 파일", ""])
     for label, file_name in (manifest.get("metadata_files") or {}).items():
         lines.append(f"- {label}: {file_name}")

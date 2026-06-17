@@ -68,7 +68,7 @@ EBSi 공식 시험자료 다운로더의 산출물 폴더를 입력으로 지정
 | `make_html` | HTML 생성 여부 |
 | `make_docx` | DOCX 생성 여부 |
 | `docx_layout` | `questions`, `table`, `linear` 중 하나 |
-| `asset_text` | DOCX에 에셋 주변 텍스트를 넣는 방식. 기본값은 `tables_only` |
+| `asset_text` | DOCX에 그림/표 주변 추출 텍스트를 넣는 방식. 기본값은 `below` |
 | `install_packages` | 필요한 패키지를 `system/packages`에 자동 준비 |
 | `ebsi_reports_mode` | EBSi 보고서 자동 인식 여부. 기본값은 `auto`, 끄려면 `off` |
 | `include_legacy_downloads` | EBSi `legacy` 산출물 포함 여부. 기본값은 `false` |

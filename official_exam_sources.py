@@ -32,10 +32,16 @@ SESSION_TO_MONTH = {
     "5월": "05",
     "6월": "06",
     "7월": "07",
+    "8월": "08",
     "9월": "09",
     "10월": "10",
+    "11월": "11",
+    "12월": "12",
     "수능": "11",
 }
+
+ALL_MONTH_SESSIONS = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
+OFFICE_DEFAULT_SESSIONS = ["3월", "4월", "5월", "7월", "10월"]
 
 SPECIAL_EXECUTION_MONTHS = {
     ("2021", "수능"): "12",
@@ -48,10 +54,16 @@ SESSION_LABEL = {
     "5월": "5월-학력평가",
     "6월": "6월-모의평가",
     "7월": "7월-학력평가",
+    "8월": "8월",
     "9월": "9월-모의평가",
     "10월": "10월-학력평가",
+    "11월": "11월",
+    "12월": "12월",
     "수능": "대학수학능력시험",
 }
+
+KICE_TITLE_PATTERN = re.compile(r"(모의평가|모평|평가원|대학수학능력시험|수능)")
+OFFICE_TITLE_PATTERN = re.compile(r"(학력평가|학평)")
 
 EBS_DOCS = {
     "문제": {
@@ -71,6 +83,20 @@ EBS_DOCS = {
         "kind": "solution_pdf",
         "extension": ".pdf",
         "source_org": "EBSi",
+    },
+    "듣기": {
+        "function": "goDownLoadR",
+        "kind": "listening_audio",
+        "extension": ".mp3",
+        "source_org": "EBSi",
+        "english_only": True,
+    },
+    "대본": {
+        "function": "goDownLoadD",
+        "kind": "listening_script",
+        "extension": ".pdf",
+        "source_org": "EBSi",
+        "english_only": True,
     },
 }
 
@@ -115,6 +141,39 @@ def academic_year_from_execution(execution_year: str, month: str) -> str:
 
 def execution_month_for(academic_year: str, session: str) -> str:
     return SPECIAL_EXECUTION_MONTHS.get((academic_year, session), SESSION_TO_MONTH[session])
+
+
+def month_session_label(month: str) -> str:
+    return f"{int(month)}월"
+
+
+def classify_session_from_title(title: str, month: str, exam_family: str) -> str:
+    normalized = re.sub(r"\s+", "", title)
+    if exam_family == "kice":
+        if "대학수학능력시험" in normalized or "수능" in normalized:
+            return "수능"
+        if "모의평가" in normalized or "모평" in normalized or ("평가원" in normalized and month in {"06", "08", "09"}):
+            if "6월" in normalized or month == "06":
+                return "6월"
+            if "9월" in normalized or month in {"08", "09"}:
+                return "9월"
+            return month_session_label(month)
+        return ""
+    if exam_family == "office":
+        if OFFICE_TITLE_PATTERN.search(normalized):
+            return month_session_label(month)
+        return ""
+    return month_session_label(month)
+
+
+def listing_mismatch_note(title: str, exam_family: str) -> str:
+    if not title:
+        return ""
+    if exam_family == "kice" and not KICE_TITLE_PATTERN.search(title):
+        return "EBSi 목록 제목이 평가원 시험(모의평가/수능)으로 보이지 않아 제외함"
+    if exam_family == "office" and not OFFICE_TITLE_PATTERN.search(title):
+        return "EBSi 목록 제목이 교육청 학력평가로 보이지 않아 제외함"
+    return ""
 
 
 RETRYABLE_HTTP_STATUS = {429, 500, 502, 503, 504}
@@ -320,22 +379,29 @@ def build_ebsi_rows(
                 title = ""
                 fetch_note = f"EBSi 목록 조회 실패: {type(exc).__name__}: {exc}"
 
+            classified_session = classify_session_from_title(title, month, exam_family) if title else ""
+            effective_session = classified_session or session
+            mismatch_note = listing_mismatch_note(title, exam_family)
+            listing_for_docs = "" if mismatch_note else listing
+
             for doc_group, config in EBS_DOCS.items():
-                raw_url = first_arg_for_function(listing, config["function"])
+                if config.get("english_only") and subject_id != "80003":
+                    continue
+                raw_url = first_arg_for_function(listing_for_docs, config["function"])
                 url = absolute_ebs_url(raw_url) if raw_url else ""
                 probe = probe_url(url, timeout) if url else {
                     "reachable": "no",
                     "http_status": "",
                     "content_type": "",
                     "content_length": "",
-                    "note": "EBSi 목록에서 해당 버튼 URL을 찾지 못함",
+                    "note": mismatch_note or "EBSi 목록에서 해당 버튼 URL을 찾지 못함",
                 }
                 extension = filename_extension(config["extension"], url, probe["content_type"])
                 rows.append(
                     SourceRow(
                         academic_year=academic_year,
                         execution_year=execution_year,
-                        session=session,
+                        session=effective_session,
                         execution_month=month,
                         subject=subject_name,
                         doc_group=doc_group,
@@ -345,7 +411,7 @@ def build_ebsi_rows(
                         url=url,
                         recommended_filename=recommended_filename(
                             academic_year,
-                            session,
+                            effective_session,
                             subject_name,
                             doc_group,
                             extension,
@@ -357,7 +423,7 @@ def build_ebsi_rows(
                         content_length=probe["content_length"],
                         sha256="",
                         local_path="",
-                        note=fetch_note or probe["note"],
+                        note=fetch_note or mismatch_note or probe["note"],
                     )
                 )
     return rows
@@ -488,10 +554,10 @@ def download_rows(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="EBSi 공식 기출문제 목록에서 생활과 윤리 개별 시험 문제/정답/해설 출처를 수집합니다."
+        description="EBSi 공식 기출문제 목록에서 과목별 시험 문제/정답/해설 출처를 수집합니다."
     )
     parser.add_argument("--academic-years", nargs="+", default=["2026"], help="학년도 목록")
-    parser.add_argument("--sessions", nargs="+", default=["6월", "9월", "수능"], choices=list(SESSION_TO_MONTH), help="시행 구분")
+    parser.add_argument("--sessions", nargs="+", default=ALL_MONTH_SESSIONS, choices=list(SESSION_TO_MONTH), help="시행 구분")
     parser.add_argument("--subject-id", default=SUBJECT_ID, help="EBSi 과목 ID")
     parser.add_argument("--subject-name", default=SUBJECT_NAME, help="표시 과목명")
     parser.add_argument("--area-ord", default=AREA_ORD, help="EBSi 영역 순번")

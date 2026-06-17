@@ -25,8 +25,8 @@ from archive_config import (
 APP_DIR = Path(__file__).resolve().parent
 FAMILY_ORDER = ["평가원", "교육청"]
 DEFAULT_SESSIONS_BY_FAMILY = {
-    "평가원": ["6월", "9월", "수능"],
-    "교육청": ["3월", "4월", "7월", "10월"],
+    "평가원": ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"],
+    "교육청": ["3월", "4월", "5월", "7월", "10월"],
 }
 
 
@@ -66,7 +66,7 @@ class ArchiveApp:
 
         desc = ttk.Label(
             frame,
-            text="EBSi 제공 공식 다운로드를 일괄적으로 처리합니다. 사회탐구 과목 전체 제공. ID 업데이트 시 코딩 LLM 사용 패치 권장.",
+            text="EBSi 공식 기출문제 파일을 과목별로 확인하고, 선택 다운로드와 저장 경로 복사를 한 화면에서 처리합니다.",
         )
         desc.pack(anchor="w", pady=(4, 12))
 
@@ -105,20 +105,19 @@ class ArchiveApp:
         self.range_label = ttk.Label(future_row, text="")
         self.range_label.pack(side="left", padx=(12, 0))
 
-        actions = ttk.LabelFrame(frame, text="다운로드 전", padding=10)
+        actions = ttk.LabelFrame(frame, text="핵심 흐름", padding=10)
         actions.pack(fill="x", pady=(12, 0))
 
         buttons = [
-            ("환경 점검", self.env_check),
-            ("관리 대상 폴더 확인", self.open_source),
-            ("관리 대상 점검", self.scan_status),
             ("EBS 현황 확인", self.check_availability),
-            ("공식 다운로드 새로고침", self.refresh_downloads),
+            ("선택 다운로드", self.download_selected),
+            ("선택 항목 저장", self.copy_selected_to_save_path),
+            ("저장 경로 열기", self.open_copy_root),
         ]
         for index, (label, command) in enumerate(buttons):
             button = ttk.Button(actions, text=label, command=command)
-            button.grid(row=index // 5, column=index % 5, padx=4, pady=4, sticky="ew")
-            actions.columnconfigure(index % 5, weight=1)
+            button.grid(row=0, column=index, padx=4, pady=4, sticky="ew")
+            actions.columnconfigure(index, weight=1)
 
         status_bar = ttk.LabelFrame(frame, text="작업 상태", padding=(8, 5))
         status_bar.pack(fill="x", pady=(8, 0))
@@ -152,21 +151,34 @@ class ArchiveApp:
         ttk.Button(tree_buttons, text="가능 항목 전체 선택", command=self.select_all_available).pack(side="left")
         ttk.Button(tree_buttons, text="선택 해제", command=self.clear_availability_selection).pack(side="left", padx=(6, 0))
 
-        next_steps = ttk.LabelFrame(frame, text="다운로드 관련", padding=8)
+        next_steps = ttk.LabelFrame(frame, text="전사 및 재조립", padding=8)
         next_steps.pack(fill="x", pady=(10, 0))
         next_buttons = [
-            ("선택 다운로드", self.download_selected),
-            ("선택 항목 저장", self.copy_selected_to_save_path),
-            ("누락/재다운로드 보고서", self.make_gap_report),
-            ("누락 보고서 기준 반영", self.apply_to_copy_root),
-            ("보고서 확인", self.open_reports),
-            ("저장 경로 열기", self.open_copy_root),
-            ("버튼 기능 안내", self.show_button_help),
+            ("다운로드 원본 전사/재조립", self.reassemble_downloads),
+            ("재조립 결과 열기", self.open_reassembly_output),
+            ("재조립 로그 열기", self.open_reassembly_logs),
         ]
         for index, (label, command) in enumerate(next_buttons):
             button = ttk.Button(next_steps, text=label, command=command)
             button.grid(row=0, column=index, padx=4, pady=4, sticky="ew")
             next_steps.columnconfigure(index, weight=1)
+
+        utility_steps = ttk.LabelFrame(frame, text="편의 기능", padding=8)
+        utility_steps.pack(fill="x", pady=(10, 0))
+        utility_buttons = [
+            ("환경 점검", self.env_check),
+            ("관리 대상 폴더 확인", self.open_source),
+            ("관리 대상 점검", self.scan_status),
+            ("공식 다운로드 새로고침", self.refresh_downloads),
+            ("누락/재다운로드 보고서", self.make_gap_report),
+            ("누락 보고서 기준 반영", self.apply_to_copy_root),
+            ("보고서 확인", self.open_reports),
+            ("버튼 기능 안내", self.show_button_help),
+        ]
+        for index, (label, command) in enumerate(utility_buttons):
+            button = ttk.Button(utility_steps, text=label, command=command)
+            button.grid(row=index // 4, column=index % 4, padx=4, pady=4, sticky="ew")
+            utility_steps.columnconfigure(index % 4, weight=1)
 
         log_frame = ttk.LabelFrame(frame, text="처리 내역", padding=8)
         log_frame.pack(fill="both", expand=True)
@@ -287,6 +299,13 @@ class ArchiveApp:
         end = academic_year_end(self.config, include_future=self.include_future.get())
         return self.config.reports_dir / f"{suffix}_{safe}_{self.config.academic_year_start}_{end}.json"
 
+    def _reassembly_root(self) -> Path:
+        return APP_DIR / "test_crawl_and_reassemble"
+
+    def _reassembly_output_dir(self) -> Path:
+        safe = self._safe_subject_name()
+        return self._reassembly_root() / "output" / f"{safe}_reassembled"
+
     def _default_sessions_for_subject(self, subject: dict[str, str]) -> list[str]:
         family = self._subject_family(subject)
         return list(DEFAULT_SESSIONS_BY_FAMILY.get(family, self.config.sessions))
@@ -391,22 +410,50 @@ class ArchiveApp:
     def open_reports(self) -> None:
         self.open_path(str(APP_DIR / self.config.reports_dir))
 
+    def open_reassembly_output(self) -> None:
+        self.open_path(str(self._reassembly_output_dir()))
+
+    def open_reassembly_logs(self) -> None:
+        self.open_path(str(self._reassembly_root() / "logs"))
+
+    def reassemble_downloads(self) -> None:
+        input_dir = APP_DIR / self._subject_download_dir()
+        if not input_dir.exists() or not any(input_dir.rglob("*.pdf")):
+            messagebox.showinfo(
+                "전사할 PDF 없음",
+                "먼저 EBS 현황 확인 후 문제/해설 PDF를 다운로드해 주세요.\n영어 듣기 음성은 보관만 하고 전사하지 않습니다.",
+            )
+            return
+        command = [
+            sys.executable,
+            str(self._reassembly_root() / "system" / "pipeline_runner.py"),
+            "--input",
+            str(input_dir),
+            "--output-dir",
+            str(self._reassembly_output_dir()),
+        ]
+        self.run_async("다운로드 원본 전사/재조립", command, allow_fail=True)
+
     def show_button_help(self) -> None:
         messagebox.showinfo(
             "버튼 기능 안내",
             "\n".join(
                 [
+                    "EBS 현황 확인: 선택한 시험 구분/과목에서 받을 수 있는 문제, 빠른 정답, 해설을 표에 표시합니다.",
+                    "가능 항목 전체 선택: 표에서 현재 다운로드 가능한 항목만 한 번에 선택합니다.",
+                    "선택 다운로드: 표에서 선택한 가능 항목만 다운로드 원본 폴더에 저장합니다.",
+                    "선택 항목 저장: 다운로드 원본 폴더의 파일을 사용자가 지정한 저장 경로로 복사합니다.",
+                    "저장 경로 열기: 복사 결과를 확인할 폴더를 엽니다.",
+                    "다운로드 원본 전사/재조립: 다운로드한 문제/해설 PDF를 별도 작업 폴더에서 Markdown, HTML, DOCX로 변환합니다.",
+                    "재조립 결과 열기: 전사/재조립 산출물 폴더를 엽니다.",
+                    "재조립 로그 열기: 전사/재조립 과정의 로그를 엽니다.",
                     "환경 점검: EBSi 접속, 네트워크, 폴더 상태를 확인합니다.",
                     "관리 대상 폴더 확인: 사용자가 시험 자료를 총괄 배치할 폴더를 엽니다.",
                     "관리 대상 점검: 관리 대상 폴더를 스캔하고 보유 현황 보고서를 만듭니다.",
-                    "EBS 현황 확인: EBSi에서 받을 수 있는 공식 항목을 EBS 목록에 표시합니다.",
-                    "선택 다운로드: 표에서 선택한 가능 항목만 다운로드합니다.",
-                    "선택 항목 저장: current 다운로드 원본을 지정한 저장 경로에 반영합니다.",
-                    "공식 다운로드 새로고침: 선택 과목의 전체 범위를 다시 확인하고 다운로드합니다.",
+                    "공식 다운로드 새로고침: 선택 과목의 전체 범위를 다시 확인하고 가능한 파일을 일괄 다운로드합니다.",
                     "누락/재다운로드 보고서: 현재 보유분과 공식 원본을 대조합니다.",
                     "누락 보고서 기준 반영: 누락 보고서에 잡힌 파일을 지정한 저장 경로로 복사합니다.",
                     "보고서 확인: 보고서 폴더를 엽니다.",
-                    "저장 경로 열기: 지정한 저장 경로 폴더를 엽니다.",
                 ]
             ),
         )
@@ -508,8 +555,20 @@ class ArchiveApp:
         if not self.availability_rows:
             return
 
-        session_order = {"3월": 1, "4월": 2, "6월": 3, "7월": 4, "9월": 5, "10월": 6, "수능": 7}
-        doc_order = {"문제": 1, "정답": 2, "해설": 3}
+        session_order = {
+            "3월": 1,
+            "4월": 2,
+            "5월": 3,
+            "6월": 4,
+            "7월": 5,
+            "8월": 6,
+            "9월": 7,
+            "10월": 8,
+            "11월": 9,
+            "12월": 10,
+            "수능": 11,
+        }
+        doc_order = {"문제": 1, "정답": 2, "해설": 3, "듣기": 4, "대본": 5}
 
         def sort_value(row: dict[str, str]):
             if column == "year":

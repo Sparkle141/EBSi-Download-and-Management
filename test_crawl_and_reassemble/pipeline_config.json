@@ -14,7 +14,7 @@
     "make_html":  true,
     "make_docx":  true,
     "docx_layout":  "questions",
-    "asset_text":  "tables_only",
+    "asset_text":  "below",
     "install_packages":  true,
     "copy_to_output":  true,
     "copy_to_external_output":  true,
