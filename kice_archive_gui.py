@@ -8,7 +8,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from tkinter import BooleanVar, StringVar, Tk, filedialog, messagebox
+from tkinter import BooleanVar, StringVar, Tk, Toplevel, filedialog, messagebox
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 
@@ -25,9 +25,23 @@ from archive_config import (
 APP_DIR = Path(__file__).resolve().parent
 FAMILY_ORDER = ["평가원", "교육청"]
 DEFAULT_SESSIONS_BY_FAMILY = {
-    "평가원": ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"],
+    "평가원": ["6월", "9월", "수능"],
     "교육청": ["3월", "4월", "5월", "7월", "10월"],
 }
+REASSEMBLY_OUTPUT_SUFFIX = "전사 및 조립"
+REASSEMBLY_SKIP_DIR_MARKERS = {REASSEMBLY_OUTPUT_SUFFIX, "legacy"}
+
+
+def scoped_sessions_for_family(family: str, sessions: list[str] | None = None) -> list[str]:
+    allowed = DEFAULT_SESSIONS_BY_FAMILY.get(family)
+    if not allowed:
+        return list(sessions or [])
+    if not sessions:
+        return list(allowed)
+    if any(session not in allowed for session in sessions):
+        return list(allowed)
+    selected = [session for session in allowed if session in sessions]
+    return selected or list(allowed)
 
 
 class ArchiveApp:
@@ -307,7 +321,11 @@ class ArchiveApp:
 
     def _default_sessions_for_subject(self, subject: dict[str, str]) -> list[str]:
         family = self._subject_family(subject)
-        return list(DEFAULT_SESSIONS_BY_FAMILY.get(family, self.config.sessions))
+        return scoped_sessions_for_family(family, self.config.sessions)
+
+    def _subject_sessions(self, subject: dict[str, str]) -> list[str]:
+        family = self._subject_family(subject)
+        return scoped_sessions_for_family(family, list(subject.get("sessions") or []))
 
     def _on_family_changed(self) -> None:
         self._refresh_subject_choices()
@@ -316,7 +334,7 @@ class ArchiveApp:
     def _on_subject_changed(self) -> None:
         subject = self._selected_subject()
         self.config.profile_name = subject["name"]
-        self.config.sessions = list(subject.get("sessions") or self._default_sessions_for_subject(subject))
+        self.config.sessions = self._subject_sessions(subject) or self._default_sessions_for_subject(subject)
         self.config.download_dir = self._subject_download_dir()
         self.config.legacy_download_dir = self._subject_legacy_dir()
         self.config.official_sources_report = self._subject_sources_report("official_sources")
@@ -337,6 +355,7 @@ class ArchiveApp:
             self.config.copy_root = default_copy
         self.save_paths()
         self._refresh_subject_labels()
+        self._clear_availability()
         self.log_line(f"선택: {self.exam_family_name.get()} / {self.subject_name.get()}")
         if not subject.get("enabled", True):
             messagebox.showinfo("확장 예정", subject.get("note", "아직 지원하지 않는 과목입니다."))
@@ -436,21 +455,104 @@ class ArchiveApp:
 
     def reassemble_downloads(self) -> None:
         input_dir = APP_DIR / self._subject_download_dir()
-        if not input_dir.exists() or not any(input_dir.rglob("*.pdf")):
+        targets = self._discover_reassembly_targets(input_dir)
+        if not targets:
             messagebox.showinfo(
                 "전사할 PDF 없음",
                 "먼저 EBS 현황 확인 후 문제/해설 PDF를 다운로드해 주세요.\n영어 듣기 음성은 보관만 하고 전사하지 않습니다.",
             )
             return
+        selected_targets = self._choose_reassembly_targets(targets)
+        if not selected_targets:
+            return
         command = [
             sys.executable,
             "reassemble_downloads_by_folder.py",
-            "--input-dir",
-            str(input_dir),
-            "--manifest",
-            str(self._subject_manifest("reassembly_manifest")),
         ]
+        for target in selected_targets:
+            command.extend(["--input-dir", str(target)])
+        command.extend(["--manifest", str(self._subject_manifest("reassembly_manifest"))])
         self.run_async("다운로드 원본 전사/재조립", command, allow_fail=True)
+
+    def _should_skip_reassembly_path(self, path: Path) -> bool:
+        return any(marker in part for part in path.parts for marker in REASSEMBLY_SKIP_DIR_MARKERS)
+
+    def _discover_reassembly_targets(self, input_dir: Path) -> list[dict[str, object]]:
+        if not input_dir.exists():
+            return []
+
+        folders: set[Path] = set()
+        for pdf in input_dir.rglob("*.pdf"):
+            try:
+                relative = pdf.relative_to(input_dir)
+            except ValueError:
+                relative = pdf
+            if self._should_skip_reassembly_path(relative):
+                continue
+            folders.add(pdf.parent)
+
+        targets: list[dict[str, object]] = []
+        for folder in sorted(folders, key=lambda item: item.as_posix()):
+            pdfs = sorted(pdf for pdf in folder.glob("*.pdf") if pdf.is_file())
+            try:
+                label = str(folder.relative_to(input_dir))
+            except ValueError:
+                label = str(folder)
+            targets.append({"folder": folder, "label": label, "pdf_count": len(pdfs)})
+        return targets
+
+    def _choose_reassembly_targets(self, targets: list[dict[str, object]]) -> list[Path]:
+        dialog = Toplevel(self.root)
+        dialog.title("전사/재조립 대상 선택")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.geometry("680x420")
+        dialog.minsize(560, 320)
+
+        container = ttk.Frame(dialog, padding=12)
+        container.pack(fill="both", expand=True)
+        ttk.Label(container, text="전사/재조립할 다운로드 결과물을 선택하세요. 여러 항목은 Ctrl/Shift로 선택할 수 있습니다.").pack(
+            anchor="w", pady=(0, 8)
+        )
+
+        tree = ttk.Treeview(
+            container,
+            columns=("folder", "pdfs"),
+            show="headings",
+            selectmode="extended",
+            height=12,
+        )
+        tree.heading("folder", text="다운로드 결과물")
+        tree.heading("pdfs", text="PDF")
+        tree.column("folder", width=520, stretch=True)
+        tree.column("pdfs", width=70, anchor="center", stretch=False)
+        tree.pack(fill="both", expand=True)
+
+        for index, target in enumerate(targets):
+            tree.insert("", "end", iid=str(index), values=(target["label"], target["pdf_count"]))
+        tree.selection_set([str(index) for index in range(len(targets))])
+
+        selected: list[Path] = []
+
+        def select_all() -> None:
+            tree.selection_set([str(index) for index in range(len(targets))])
+
+        def run_selected() -> None:
+            picked = list(tree.selection())
+            if not picked:
+                messagebox.showinfo("선택 필요", "전사/재조립할 항목을 하나 이상 선택해 주세요.", parent=dialog)
+                return
+            selected.extend(Path(targets[int(iid)]["folder"]) for iid in picked)
+            dialog.destroy()
+
+        buttons = ttk.Frame(container)
+        buttons.pack(fill="x", pady=(8, 0))
+        ttk.Button(buttons, text="전체 선택", command=select_all).pack(side="left")
+        ttk.Button(buttons, text="선택 실행", command=run_selected).pack(side="right")
+        ttk.Button(buttons, text="취소", command=dialog.destroy).pack(side="right", padx=(0, 6))
+
+        dialog.wait_window()
+        return selected
 
     def show_button_help(self) -> None:
         messagebox.showinfo(
@@ -462,7 +564,7 @@ class ArchiveApp:
                     "선택 다운로드: 표에서 선택한 가능 항목만 다운로드 원본 폴더에 저장합니다.",
                     "선택 항목 저장: 다운로드 원본 폴더의 파일을 사용자가 지정한 저장 경로로 복사합니다.",
                     "저장 경로 열기: 복사 결과를 확인할 폴더를 엽니다.",
-                    "다운로드 원본 전사/재조립: 다운로드한 문제/해설 PDF 옆에 '6월 전사 및 조립' 같은 폴더를 만들고 Markdown, HTML, DOCX로 변환합니다.",
+                    "다운로드 원본 전사/재조립: 다운로드한 시험 폴더를 하나 이상 선택한 뒤, 문제/해설 PDF 옆에 '6월 전사 및 조립' 같은 폴더를 만들고 Markdown, HTML, DOCX로 변환합니다.",
                     "재조립 결과 열기: 과목 다운로드 원본 폴더를 엽니다.",
                     "재조립 로그 열기: 전사/재조립 과정의 로그를 엽니다.",
                     "환경 점검: EBSi 접속, 네트워크, 폴더 상태를 확인합니다.",
@@ -481,7 +583,7 @@ class ArchiveApp:
 
     def sessions_args(self) -> list[str]:
         subject = self._selected_subject()
-        return list(subject.get("sessions") or self._default_sessions_for_subject(subject))
+        return self._subject_sessions(subject) or self._default_sessions_for_subject(subject)
 
     def run_async(self, title: str, command: list[str], allow_fail: bool = False) -> None:
         self.save_paths()
@@ -551,10 +653,13 @@ class ArchiveApp:
             str(out_path),
         ]
 
-    def _load_availability(self, path: Path) -> None:
+    def _clear_availability(self) -> None:
         self.availability_rows = []
         for item in self.availability_tree.get_children():
             self.availability_tree.delete(item)
+
+    def _load_availability(self, path: Path) -> None:
+        self._clear_availability()
         if not path.exists():
             return
         with path.open("r", encoding="utf-8-sig", newline="") as file:

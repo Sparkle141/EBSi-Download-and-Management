@@ -27,6 +27,14 @@ def discover_pdf_folders(input_dir: Path) -> list[Path]:
     return sorted(folders, key=lambda item: item.as_posix())
 
 
+def discover_pdf_folders_from_inputs(input_dirs: list[Path]) -> list[Path]:
+    folders: dict[str, Path] = {}
+    for input_dir in input_dirs:
+        for folder in discover_pdf_folders(input_dir):
+            folders[str(folder.resolve()).lower()] = folder
+    return sorted(folders.values(), key=lambda item: item.as_posix())
+
+
 def output_dir_for(folder: Path) -> Path:
     label = folder.name if folder.name else "다운로드"
     return folder / f"{label} {OUTPUT_SUFFIX}"
@@ -50,7 +58,7 @@ def run_reassembly(folder: Path, output_dir: Path, no_install_packages: bool) ->
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="다운로드 시험 폴더별로 전사 및 재조립 산출물을 옆에 생성합니다.")
-    parser.add_argument("--input-dir", required=True, help="downloads/<과목>/current 폴더")
+    parser.add_argument("--input-dir", action="append", required=True, help="downloads/<과목>/current 폴더 또는 선택한 시험 폴더")
     parser.add_argument("--manifest", default="", help="처리 결과 JSON 기록")
     parser.add_argument("--no-install-packages", action="store_true", help="패키지 자동 설치를 건너뜁니다.")
     return parser.parse_args()
@@ -58,17 +66,21 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    input_dir = Path(args.input_dir)
-    if not input_dir.is_absolute():
-        input_dir = ROOT / input_dir
-    if not input_dir.exists():
-        raise SystemExit(f"다운로드 원본 폴더가 없습니다: {input_dir}")
+    input_dirs: list[Path] = []
+    for raw_input_dir in args.input_dir:
+        input_dir = Path(raw_input_dir)
+        if not input_dir.is_absolute():
+            input_dir = ROOT / input_dir
+        if not input_dir.exists():
+            raise SystemExit(f"다운로드 원본 폴더가 없습니다: {input_dir}")
+        input_dirs.append(input_dir)
+
     if not PIPELINE_RUNNER.exists():
         raise SystemExit(f"전사/재조립 실행기를 찾을 수 없습니다: {PIPELINE_RUNNER}")
 
-    folders = discover_pdf_folders(input_dir)
+    folders = discover_pdf_folders_from_inputs(input_dirs)
     if not folders:
-        raise SystemExit(f"전사할 PDF가 없습니다: {input_dir}")
+        raise SystemExit("전사할 PDF가 없습니다: " + ", ".join(str(path) for path in input_dirs))
 
     results: list[dict[str, object]] = []
     failures = 0
@@ -88,12 +100,12 @@ def main() -> int:
     manifest = {
         "schema": "download-folder-reassembly-v1",
         "created_at": datetime.now().isoformat(timespec="seconds"),
-        "input_dir": str(input_dir),
+        "input_dirs": [str(path) for path in input_dirs],
         "folder_count": len(folders),
         "failure_count": failures,
         "results": results,
     }
-    manifest_path = Path(args.manifest) if args.manifest else input_dir / "reassembly_manifest.json"
+    manifest_path = Path(args.manifest) if args.manifest else input_dirs[0] / "reassembly_manifest.json"
     if not manifest_path.is_absolute():
         manifest_path = ROOT / manifest_path
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
