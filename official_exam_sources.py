@@ -64,6 +64,7 @@ SESSION_LABEL = {
 
 KICE_TITLE_PATTERN = re.compile(r"(모의평가|모평|평가원|대학수학능력시험|수능)")
 OFFICE_TITLE_PATTERN = re.compile(r"(학력평가|학평)")
+OFFICE_SESSION_TITLE_PATTERN = re.compile(r"(?P<month>1[0-2]|[1-9])월(?:고[123])?(?:전국연합)?(?:학력평가|학평)")
 
 EBS_DOCS = {
     "문제": {
@@ -161,9 +162,40 @@ def classify_session_from_title(title: str, month: str, exam_family: str) -> str
         return ""
     if exam_family == "office":
         if OFFICE_TITLE_PATTERN.search(normalized):
+            match = OFFICE_SESSION_TITLE_PATTERN.search(normalized)
+            if match:
+                return month_session_label(match.group("month"))
             return month_session_label(month)
         return ""
     return month_session_label(month)
+
+
+def merge_note(*parts: str) -> str:
+    return "; ".join(part for part in parts if part)
+
+
+def session_correction_note(requested_session: str, effective_session: str, execution_month: str, exam_family: str) -> str:
+    if exam_family != "office" or requested_session == effective_session:
+        return ""
+    return f"EBSi 제목 기준 회차를 {effective_session}로 보정함(조회월 {int(execution_month)}월)."
+
+
+def row_rank(row: SourceRow) -> tuple[int, int, int]:
+    return (
+        1 if row.reachable == "yes" else 0,
+        1 if row.url else 0,
+        1 if row.title else 0,
+    )
+
+
+def dedupe_source_rows(rows: list[SourceRow]) -> list[SourceRow]:
+    selected: dict[tuple[str, str, str, str], tuple[int, SourceRow]] = {}
+    for index, row in enumerate(rows):
+        key = (row.academic_year, row.session, row.subject, row.doc_group)
+        current = selected.get(key)
+        if current is None or row_rank(row) > row_rank(current[1]):
+            selected[key] = (index, row)
+    return [row for _index, row in sorted(selected.values(), key=lambda item: item[0])]
 
 
 def listing_mismatch_note(title: str, exam_family: str) -> str:
@@ -382,6 +414,7 @@ def build_ebsi_rows(
             classified_session = classify_session_from_title(title, month, exam_family) if title else ""
             effective_session = classified_session or session
             mismatch_note = listing_mismatch_note(title, exam_family)
+            correction_note = session_correction_note(session, effective_session, month, exam_family)
             listing_for_docs = "" if mismatch_note else listing
 
             for doc_group, config in EBS_DOCS.items():
@@ -423,10 +456,10 @@ def build_ebsi_rows(
                         content_length=probe["content_length"],
                         sha256="",
                         local_path="",
-                        note=fetch_note or mismatch_note or probe["note"],
+                        note=merge_note(fetch_note, mismatch_note, correction_note, probe["note"]),
                     )
                 )
-    return rows
+    return dedupe_source_rows(rows)
 
 
 def write_sources(path: Path, rows: list[SourceRow]) -> None:
